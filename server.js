@@ -134,36 +134,37 @@ wss.on('connection', (ws) => {
     const { type, docId, userId, operation, version, cursor } = data;
 
     if (type === 'JOIN') {
-      if (!docsState.has(docId)) {
-        try {
-          const result = await pool.query('SELECT content, version FROM documents WHERE id = $1', [docId]);
-          if (result.rows.length === 0) {
-            ws.send(JSON.stringify({ error: 'Document not found' }));
-            return;
-          }
+      try {
+        const result = await pool.query('SELECT content, version FROM documents WHERE id = $1', [docId]);
+        if (result.rows.length === 0) {
+          ws.send(JSON.stringify({ error: 'Document not found' }));
+          return;
+        }
+
+        if (!docsState.has(docId)) {
           docsState.set(docId, {
             content: result.rows[0].content || '',
             version: result.rows[0].version || 0,
             history: [],
             clients: new Map()
           });
-        } catch (e) {
-          console.error('Failed to load doc', e);
-          return;
         }
+
+        const state = docsState.get(docId);
+        state.clients.set(ws, userId);
+
+        ws.send(JSON.stringify({
+          type: 'INIT',
+          content: state.content,
+          version: state.version,
+          users: Array.from(state.clients.values())
+        }));
+
+        broadcast(docId, { type: 'USER_JOINED', userId }, ws);
+      } catch (e) {
+        console.error('Failed to load doc', e);
+        return;
       }
-
-      const state = docsState.get(docId);
-      state.clients.set(ws, userId);
-
-      ws.send(JSON.stringify({
-        type: 'INIT',
-        content: state.content,
-        version: state.version,
-        users: Array.from(state.clients.values())
-      }));
-
-      broadcast(docId, { type: 'USER_JOINED', userId }, ws);
     } else if (type === 'OPERATION') {
       const state = docsState.get(docId);
       if (!state) return;
