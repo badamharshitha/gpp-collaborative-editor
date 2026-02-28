@@ -120,7 +120,7 @@ wss.on('connection', (ws) => {
                 userId: op.userId,
                 operation: op,
                 version: state.version
-            });
+            }, ws);
 
             db.query('UPDATE documents SET content = $1, version = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3', [state.content, state.version, docId]).catch(console.error);
         } else if (type === 'CURSOR') {
